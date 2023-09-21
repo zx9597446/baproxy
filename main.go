@@ -9,52 +9,47 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"strings"
 
 	"github.com/kataras/basicauth"
 )
 
 var (
-	flgUser, flgPass, flgRemote, flgListen string
+	flgAuth, flgRemoteHost, flgListen string
+	flgRemotePort                     int
 )
 
 func initFlags() {
-	flag.StringVar(&flgUser, "u", "", "username")
-	flag.StringVar(&flgPass, "p", "", "password")
-	flag.StringVar(&flgRemote, "r", "", "remote addr")
 	flag.StringVar(&flgListen, "l", ":8089", "listen addr")
+	flag.StringVar(&flgAuth, "a", "", "auth for user:pass")
+	flag.StringVar(&flgRemoteHost, "h", "localhost", "remote host")
+	flag.IntVar(&flgRemotePort, "p", 8088, "remote port")
 	flag.Parse()
 }
 
 func main() {
 	initFlags()
 
-	if flgRemote == "" {
-		log.Fatal("remote addr is required")
-	}
-	if flgUser == "" {
-		flgUser = shortID(6)
-	}
-	if flgPass == "" {
-		flgPass = shortID(12)
-	}
-
-	fmt.Printf("listening on %s, username: %s, password: %s, remote: %s\n", flgListen, flgUser, flgPass, flgRemote)
-
-	auth := basicauth.Default(map[string]string{
-		flgUser: flgPass,
-	})
+	remote := fmt.Sprintf("http://%s:%d", flgRemoteHost, flgRemotePort)
 
 	// initialize a reverse proxy and pass the actual backend server url here
-	proxy, err := NewProxy(flgRemote)
+	proxy, err := NewProxy(remote)
 	if err != nil {
 		panic(err)
 	}
 
 	h := ProxyRequestHandler(proxy)
-	newh := basicauth.HandlerFunc(auth, h)
+	s := strings.Split(flgAuth, ":")
+
+	if len(s) == 2 {
+		auth := basicauth.Default(map[string]string{
+			s[0]: s[1],
+		})
+		h = basicauth.HandlerFunc(auth, h)
+	}
 
 	// handle all requests to your server using the proxy
-	http.HandleFunc("/", newh)
+	http.HandleFunc("/", h)
 	log.Fatal(http.ListenAndServe(flgListen, nil))
 }
 
@@ -73,7 +68,7 @@ func NewProxy(targetHost string) (*httputil.ReverseProxy, error) {
 		modifyRequest(req)
 	}
 
-	proxy.ModifyResponse = modifyResponse()
+	// proxy.ModifyResponse = modifyResponse()
 	proxy.ErrorHandler = errorHandler()
 	return proxy, nil
 }
