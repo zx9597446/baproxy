@@ -38,6 +38,8 @@ func main() {
 		flgPass = shortID(12)
 	}
 
+	fmt.Printf("listening on %s, username: %s, password: %s, remote: %s\n", flgListen, flgUser, flgPass, flgRemote)
+
 	auth := basicauth.Default(map[string]string{
 		flgUser: flgPass,
 	})
